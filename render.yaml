@@ -1,0 +1,37 @@
+# Deploy from Render > New > Blueprint after uploading this project to GitHub.
+# Render asks for the two secret values before creating the paid service.
+services:
+  - type: web
+    name: hundred-years
+    runtime: node
+    region: oregon
+    plan: 0.5c-512mb
+    numInstances: 1
+    buildCommand: node --check server.mjs
+    startCommand: node server.mjs
+    healthCheckPath: /healthz
+    autoDeployTrigger: 'off'
+    maxShutdownDelaySeconds: 300
+    disk:
+      name: hundred-years-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: '24'
+      - key: NODE_ENV
+        value: production
+      - key: APP_MODE
+        value: hosted
+      - key: DATA_DIR
+        value: /var/data/hundred-years
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: AI1_MODEL
+        value: gpt-6.1-sol
+      - key: AI2_MODEL
+        value: gpt-image-2.5-flare
+      - key: IMAGE_QUALITY
+        value: medium

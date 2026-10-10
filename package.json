@@ -1,0 +1,14 @@
+{
+  "name": "an-image-worth-preserving",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A local, two-phase exhibition of an autonomous image-making experiment.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.mjs --open",
+    "test": "node --test test/*.test.mjs"
+  }
+}
