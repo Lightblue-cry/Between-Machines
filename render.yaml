@@ -11,7 +11,6 @@ services:
     startCommand: node server.mjs
     healthCheckPath: /healthz
     autoDeployTrigger: 'off'
-    maxShutdownDelaySeconds: 300
     disk:
       name: hundred-years-data
       mountPath: /var/data
