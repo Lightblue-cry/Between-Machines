@@ -18,6 +18,8 @@
   let errorTimer = null;
   let settingsBusy = false;
   let loginBusy = false;
+  let visibleImageCount = null;
+  let galleryPulseTimer = null;
 
   function access() { return state?.access || { hosted: false, operator: true, credentialsManaged: false }; }
 
@@ -94,6 +96,7 @@
       byId('pause-button').disabled = true;
       setText('error', access().hosted ? 'The server is not responding. This page will reconnect automatically.' : 'The local server is not responding. Keep it running; this page will reconnect automatically.');
       show('error', true);
+      if (state) renderExchange(state.phase === 'exhibition');
     }
   }
 
@@ -107,6 +110,48 @@
     const set = state.sets.find((item) => item.number === selectedSet) || state.sets[state.sets.length - 1];
     const version = set?.versions.find((item) => item.number === selectedVersion) || set?.versions[set.versions.length - 1];
     return { set, version };
+  }
+
+  // Presentation only: derive the exchange graphic from the existing public state.
+  function renderExchange(exhibition) {
+    const activeSet = state.sets.find((item) => item.number === state.activeSet) || state.sets.at(-1);
+    const latest = activeSet?.versions.at(-1);
+    const moving = !exhibition && state.running && !connectionFailed;
+    const activeStage = moving ? state.stage : '';
+    let flow = 'waiting';
+    let message = exhibition ? 'The exchange is complete. Every version is retained.' : 'Waiting for the first exchange.';
+    if (moving) {
+      if (state.stage === 'proposing') { flow = 'writing'; message = 'AI 1 is imagining what is worth preserving.'; }
+      else if (state.stage === 'generating') {
+        flow = latest?.decision === 'REVISE' ? 'revision' : 'prompt';
+        message = flow === 'revision' ? 'Revised instructions → AI 2 is making the next version.' : 'Prompt delivered → AI 2 is making the image.';
+      } else if (state.stage === 'reviewing') { flow = 'image'; message = 'Image returned → AI 1 is evaluating what it sees.'; }
+      else if (activeSet?.status && activeSet.status !== 'working') { flow = 'saved'; message = activeSet.status === 'accepted' ? 'Image accepted. This set is saved in the gallery.' : 'Set unresolved. All versions remain in the gallery.'; }
+      else if (latest?.decision === 'REVISE') { flow = 'revision'; message = 'Revision requested → instructions return to AI 2.'; }
+      else if (latest && !latest.decision) { flow = 'image'; message = 'Image saved → returning to AI 1 for evaluation.'; }
+      else if (activeSet?.image_prompt) { flow = 'prompt'; message = 'Prompt ready → sending it to AI 2.'; }
+    } else if (state.error || connectionFailed) message = 'Exchange paused. The saved images remain below.';
+    else if (!exhibition && state.sets.length) message = 'Exchange paused. Every completed image is saved.';
+    if (state.pauseRequested && moving) message += ' Finishing this step, then pausing.';
+    byId('exchange-diagram').dataset.flow = flow;
+    byId('exchange-diagram').classList.toggle('is-moving', moving);
+    show('exchange-diagram', !exhibition);
+    document.querySelectorAll('[data-step]').forEach((step) => {
+      const active = step.dataset.step === activeStage;
+      step.classList.toggle('active', active);
+      if (active) step.setAttribute('aria-current', 'step');
+      else step.removeAttribute('aria-current');
+    });
+    setText('exchange-status', message);
+    setText('panel-index', exhibition ? 'ARCHIVE' : activeSet ? `LIVE / SET ${pad(activeSet.number)}` : '01—03');
+    byId('gallery-bridge').classList.toggle('is-complete', exhibition);
+    const count = state.counts.images;
+    if (visibleImageCount !== null && count > visibleImageCount && !exhibition) {
+      clearTimeout(galleryPulseTimer);
+      byId('gallery-bridge').classList.add('is-saving');
+      galleryPulseTimer = setTimeout(() => byId('gallery-bridge').classList.remove('is-saving'), 2400);
+    }
+    visibleImageCount = count;
   }
 
   function render() {
@@ -189,11 +234,11 @@
 
     setText('panel-eyebrow', exhibition ? 'BEHIND THE IMAGE' : 'THE EXCHANGE');
     setText('panel-index', exhibition ? 'ARCHIVE' : '01—03');
-    byId('process-title').innerHTML = exhibition ? 'Why this image?' : 'A thought becomes<br>an image.';
+    byId('process-title').textContent = exhibition ? 'Why this image?' : 'A thought becomes an image.';
     show('process-steps', !exhibition);
-    document.querySelectorAll('[data-step]').forEach((step) => step.classList.toggle('active', !exhibition && state.running && step.dataset.step === state.stage));
+    renderExchange(exhibition);
     const prompt = nextPromptIsLive ? state.activePrompt : version?.prompt || set?.image_prompt || '';
-    setText('prompt-label', nextPromptIsLive && version ? 'NEXT REVISION PROMPT' : version && version.number > 1 ? 'REVISION PROMPT' : 'IMAGE PROMPT');
+    setText('prompt-label', !exhibition && !followLive ? 'SELECTED IMAGE PROMPT' : nextPromptIsLive && version ? 'NEXT REVISION PROMPT' : version && version.number > 1 ? 'REVISION PROMPT' : 'IMAGE PROMPT');
     setText('prompt-copy', prompt || 'AI 1’s image instructions will appear here. Its reasons stay out of view until all ten sets are complete.');
     const promptLimit = exhibition ? 170 : 320;
     byId('prompt-copy').className = `prompt-copy${!prompt ? ' is-empty' : ''}${prompt.length > promptLimit && !promptExpanded ? ' is-collapsed' : ''}`;
@@ -222,7 +267,7 @@
       const item = state.sets.find((candidate) => candidate.number === index + 1);
       const last = item?.versions[item.versions.length - 1];
       const status = item?.status === 'accepted' ? 'Accepted' : item?.status === 'unresolved' ? 'Unresolved' : item ? 'In progress' : '';
-      return `<button type="button" class="set-card${last ? '' : ' is-placeholder'}" data-set="${index + 1}" ${item ? '' : 'disabled'} aria-pressed="${set?.number === index + 1}" aria-label="Set ${index + 1}${status ? `, ${status}` : ', not started'}"><div class="set-card-image">${last ? `<img src="${escapeHtml(last.image_url)}" alt="" loading="lazy">` : `<span class="placeholder-number">${pad(index + 1)}</span>`}${status ? `<span class="card-status${item?.status === 'accepted' ? ' accepted' : ''}">${status}</span>` : ''}</div><div class="set-card-meta"><span>SET ${pad(index + 1)}</span><span>${item ? `${item.versions.length} ${item.versions.length === 1 ? 'IMAGE' : 'IMAGES'}` : 'TO COME'}</span></div></button>`;
+      return `<button type="button" class="set-card${last ? '' : ' is-placeholder'}${!exhibition && item?.number === state.activeSet ? ' is-live' : ''}" data-set="${index + 1}" ${item ? '' : 'disabled'} aria-pressed="${set?.number === index + 1}" aria-label="Set ${index + 1}${status ? `, ${status}` : ', not started'}"><div class="set-card-image">${last ? `<img src="${escapeHtml(last.image_url)}" alt="" loading="lazy">` : `<span class="placeholder-number">${pad(index + 1)}</span>`}${status ? `<span class="card-status${item?.status === 'accepted' ? ' accepted' : ''}">${status}</span>` : ''}</div><div class="set-card-meta"><span>SET ${pad(index + 1)}</span><span>${item ? `${item.versions.length} ${item.versions.length === 1 ? 'IMAGE' : 'IMAGES'}` : 'TO COME'}</span></div></button>`;
     }).join('');
     setText('footer-note', state.demo ? 'Demonstration mode · No paid AI requests' : exhibition ? `${state.counts.images} images · 10 sets · Complete saved record` : '10 sets · Up to 9 revisions per set · Every version retained');
     if (focusedVersion) document.querySelector(`[data-version="${Number(focusedVersion)}"]`)?.focus({ preventScroll: true });
@@ -281,7 +326,7 @@
     if (!card || card.disabled) return;
     const set = state.sets.find((item) => item.number === Number(card.dataset.set));
     select(set.number, state.phase === 'exhibition' ? set.versions[0]?.number : set.versions[set.versions.length - 1]?.number);
-    byId('experiment').scrollIntoView({ block: 'start' });
+    if (!window.matchMedia('(min-width: 1000px) and (min-height: 600px)').matches) byId('experiment').scrollIntoView({ block: 'start' });
   });
   byId('version-strip').addEventListener('click', (event) => {
     const button = event.target.closest('[data-version]');
