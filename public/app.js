@@ -20,6 +20,7 @@
   let loginBusy = false;
   let visibleImageCount = null;
   let galleryPulseTimer = null;
+  let displayedRecord = null;
 
   function access() { return state?.access || { hosted: false, operator: true, credentialsManaged: false }; }
 
@@ -112,38 +113,46 @@
     return { set, version };
   }
 
-  // Presentation only: derive the exchange graphic from the existing public state.
+  const wordCount = (text) => String(text || '').trim().split(/\s+/u).filter(Boolean).length;
+
+  // Emphasize the machine working on the live set, never a browsed archive image.
   function renderExchange(exhibition) {
+    const { set, version } = chosen();
     const activeSet = state.sets.find((item) => item.number === state.activeSet) || state.sets.at(-1);
     const latest = activeSet?.versions.at(-1);
-    const moving = !exhibition && state.running && !connectionFailed;
-    const activeStage = moving ? state.stage : '';
-    let flow = 'waiting';
-    let message = exhibition ? 'The exchange is complete. Every version is retained.' : 'Waiting for the first exchange.';
-    if (moving) {
-      if (state.stage === 'proposing') { flow = 'writing'; message = 'AI 1 is imagining what is worth preserving.'; }
+    const browsing = !exhibition && !followLive;
+    const moving = !exhibition && !browsing && state.running && !connectionFailed;
+    let active = 'none', flow = 'waiting';
+    let ai1 = 'Ready', ai2 = version ? 'Image saved' : 'Waiting';
+    let message = 'Waiting for the first exchange.';
+    if (exhibition) { ai1 = 'Recorded decisions'; ai2 = 'Saved image'; message = 'The complete exchange. Every version is retained.'; }
+    else if (browsing) { ai1 = 'Saved instructions'; ai2 = 'Saved image'; message = 'Viewing a saved exchange. Use Back to live to follow the current set.'; }
+    else if (moving) {
+      if (state.stage === 'proposing') { active = 'ai1'; ai1 = 'Writing a prompt'; message = 'AI 1 is imagining what is worth preserving.'; }
       else if (state.stage === 'generating') {
-        flow = latest?.decision === 'REVISE' ? 'revision' : 'prompt';
-        message = flow === 'revision' ? 'Revised instructions → AI 2 is making the next version.' : 'Prompt delivered → AI 2 is making the image.';
-      } else if (state.stage === 'reviewing') { flow = 'image'; message = 'Image returned → AI 1 is evaluating what it sees.'; }
-      else if (activeSet?.status && activeSet.status !== 'working') { flow = 'saved'; message = activeSet.status === 'accepted' ? 'Image accepted. This set is saved in the gallery.' : 'Set unresolved. All versions remain in the gallery.'; }
-      else if (latest?.decision === 'REVISE') { flow = 'revision'; message = 'Revision requested → instructions return to AI 2.'; }
-      else if (latest && !latest.decision) { flow = 'image'; message = 'Image saved → returning to AI 1 for evaluation.'; }
-      else if (activeSet?.image_prompt) { flow = 'prompt'; message = 'Prompt ready → sending it to AI 2.'; }
-    } else if (state.error || connectionFailed) message = 'Exchange paused. The saved images remain below.';
-    else if (!exhibition && state.sets.length) message = 'Exchange paused. Every completed image is saved.';
+        active = 'ai2'; flow = latest?.decision === 'REVISE' ? 'revision' : 'prompt';
+        ai1 = flow === 'revision' ? 'Revision sent' : 'Prompt sent'; ai2 = flow === 'revision' ? 'Revising the image' : 'Creating an image';
+        message = flow === 'revision' ? 'AI 1 → AI 2 · Revision instructions delivered.' : 'AI 1 → AI 2 · Image prompt delivered.';
+      } else if (state.stage === 'reviewing') { active = 'ai1'; flow = 'image'; ai1 = 'Evaluating the image'; ai2 = 'Image returned'; message = 'AI 2 → AI 1 · Evaluating the image that was made.'; }
+      else if (activeSet?.status && activeSet.status !== 'working') { flow = 'saved'; ai1 = activeSet.status === 'accepted' ? 'Accepted' : 'Unresolved'; message = 'Set complete. Every version remains in the gallery.'; }
+      else if (latest?.decision === 'REVISE') { flow = 'revision'; ai1 = 'Revision requested'; message = 'AI 1 → AI 2 · New instructions are ready.'; }
+      else if (latest && !latest.decision) { flow = 'image'; ai1 = 'Ready to evaluate'; message = 'AI 2 → AI 1 · Image saved and ready for evaluation.'; }
+      else if (activeSet?.image_prompt) { flow = 'prompt'; ai1 = 'Prompt ready'; message = 'AI 1 → AI 2 · Ready to create the image.'; }
+    } else if (state.error || connectionFailed) { ai1 = 'Paused'; message = 'Exchange paused. Completed images remain saved.'; }
+    else if (state.sets.length) { ai1 = activeSet?.status === 'unresolved' ? 'Unresolved' : activeSet?.status === 'accepted' ? 'Accepted' : latest?.decision === 'REVISE' ? 'Revision ready · paused' : 'Paused'; message = 'Exchange paused. Every completed image is saved.'; }
     if (state.pauseRequested && moving) message += ' Finishing this step, then pausing.';
-    byId('exchange-diagram').dataset.flow = flow;
-    byId('exchange-diagram').classList.toggle('is-moving', moving);
-    show('exchange-diagram', !exhibition);
-    document.querySelectorAll('[data-step]').forEach((step) => {
-      const active = step.dataset.step === activeStage;
-      step.classList.toggle('active', active);
-      if (active) step.setAttribute('aria-current', 'step');
-      else step.removeAttribute('aria-current');
-    });
+    const diagram = byId('exchange-diagram');
+    diagram.dataset.active = active;
+    diagram.dataset.flow = flow;
+    diagram.classList.toggle('is-moving', moving);
+    for (const name of ['ai1', 'ai2']) {
+      byId(`${name}-panel`).classList.toggle('is-active', active === name);
+      byId(`${name}-panel`).setAttribute('aria-busy', String(active === name));
+    }
+    setText('ai1-status', ai1); setText('ai2-status', ai2);
     setText('exchange-status', message);
-    setText('panel-index', exhibition ? 'ARCHIVE' : activeSet ? `LIVE / SET ${pad(activeSet.number)}` : '01—03');
+    setText('transfer-prompt-label', flow === 'revision' ? 'REVISION' : 'PROMPT');
+    setText('panel-index', `${browsing || exhibition ? 'RECORD' : 'SET'} ${set ? pad(set.number) : '—'} / ${pad(state.limits?.sets || 10)}`);
     byId('gallery-bridge').classList.toggle('is-complete', exhibition);
     const count = state.counts.images;
     if (visibleImageCount !== null && count > visibleImageCount && !exhibition) {
@@ -175,16 +184,13 @@
     if (hosted && !operator) byId('api-key').value = '';
     const { set, version } = chosen();
     const nextPromptIsLive = !exhibition && followLive && state.stage === 'generating' && Boolean(state.activePrompt);
+    const record = `${set?.number || 0}:${version?.number || 0}`;
+    if (displayedRecord !== record) {
+      document.querySelector('.ai1-content').scrollTop = 0;
+      displayedRecord = record;
+    }
     document.body.classList.toggle('has-collection', state.sets.length > 0);
     document.body.classList.toggle('is-exhibition', exhibition);
-    const reasonsPanel = byId('reasons-panel');
-    const processPanel = document.querySelector('.process-panel');
-    if (exhibition && reasonsPanel.parentElement !== processPanel) {
-      processPanel.insertBefore(reasonsPanel, processPanel.querySelector('.prompt-section'));
-    } else if (!exhibition && reasonsPanel.parentElement === processPanel) {
-      document.querySelector('.viewer-layout').after(reasonsPanel);
-    }
-    reasonsPanel.setAttribute('aria-labelledby', exhibition ? 'process-title' : 'reasons-title');
     const totalSets = state.limits?.sets || 10;
     const maxVersions = state.limits?.versions || 10;
     const messages = { idle: 'Ready to begin', proposing: 'AI 1 is writing', generating: 'AI 2 is creating', reviewing: 'AI 1 is reviewing', paused: 'Experiment paused', error: 'Needs attention', complete: 'Collection complete' };
@@ -232,20 +238,41 @@
     setText('image-caption', version ? `${version.number === 1 ? 'Initial image' : `Revision ${version.number - 1}`} · Set ${pad(set.number)}${nextPromptIsLive ? ' · Previous image; the next revision is being made' : !followLive && !exhibition ? ' · Viewing a saved image' : ''}` : 'Images will appear here as the exchange unfolds.');
     document.querySelector('.recording-note').lastChild.textContent = exhibition ? ' Complete record' : 'Saved as it happens';
 
-    setText('panel-eyebrow', exhibition ? 'BEHIND THE IMAGE' : 'THE EXCHANGE');
-    setText('panel-index', exhibition ? 'ARCHIVE' : '01—03');
-    byId('process-title').textContent = exhibition ? 'Why this image?' : 'A thought becomes an image.';
-    show('process-steps', !exhibition);
     renderExchange(exhibition);
-    const prompt = nextPromptIsLive ? state.activePrompt : version?.prompt || set?.image_prompt || '';
-    setText('prompt-label', !exhibition && !followLive ? 'SELECTED IMAGE PROMPT' : nextPromptIsLive && version ? 'NEXT REVISION PROMPT' : version && version.number > 1 ? 'REVISION PROMPT' : 'IMAGE PROMPT');
-    setText('prompt-copy', prompt || 'AI 1’s image instructions will appear here. Its reasons stay out of view until all ten sets are complete.');
-    const promptLimit = exhibition ? 170 : 320;
+    const prompt = set?.image_prompt || '';
+    setText('prompt-label', 'INITIAL IMAGE PROMPT');
+    setText('prompt-copy', prompt || (state.stage === 'proposing' && followLive ? 'AI 1 is composing the first image prompt…' : 'AI 1’s image instructions will appear here.'));
+    setText('prompt-word-count', prompt ? `${wordCount(prompt)} WORDS` : '');
+    // New prompts fit in full; retain expansion for long prompts in older collections.
+    const promptLimit = 900;
     byId('prompt-copy').className = `prompt-copy${!prompt ? ' is-empty' : ''}${prompt.length > promptLimit && !promptExpanded ? ' is-collapsed' : ''}`;
     show('prompt-expand', prompt.length > promptLimit);
     setText('prompt-expand', promptExpanded ? 'Read less −' : 'Read more +');
     byId('prompt-expand').setAttribute('aria-expanded', String(promptExpanded));
-    setText('panel-footnote', exhibition ? 'Every image and decision is saved. This exhibition makes no further AI requests.' : 'The machines continue until an image is accepted, or the set reaches ten images.');
+
+    let revision = '', revisionLabel = '', revisionContext = '';
+    if (version?.decision === 'REVISE' && version.revision_prompt) {
+      revision = version.revision_prompt;
+      revisionLabel = `REVISION REQUESTED AFTER IMAGE ${pad(version.number)}`;
+      revisionContext = set.status === 'unresolved' && version.number === set.versions.at(-1)?.number
+        ? 'The revision limit was reached. These final instructions were not executed.'
+        : `Instructions for AI 2 to revise image ${pad(version.number)}.`;
+    } else if (nextPromptIsLive && version?.decision === 'REVISE') {
+      revision = state.activePrompt;
+      revisionLabel = `REVISION FOR IMAGE ${pad(version.number + 1)}`;
+      revisionContext = 'AI 2 is using these instructions to create the next version.';
+    } else if (version?.number > 1) {
+      revision = version.prompt || '';
+      revisionLabel = `REVISION USED FOR IMAGE ${pad(version.number)}`;
+      revisionContext = 'The instructions that produced the image on the right.';
+    }
+    show('revision-section', Boolean(revision));
+    setText('revision-prompt-label', revisionLabel);
+    setText('revision-prompt-copy', revision);
+    setText('revision-word-count', revision ? `${wordCount(revision)} WORDS` : '');
+    setText('revision-context', revisionContext);
+    byId('ai1-panel').classList.toggle('has-revision', Boolean(revision));
+    setText('panel-footnote', exhibition ? 'Saved explanations are revealed. No new AI requests.' : 'AI 1’s reasons are saved, then revealed after all ten sets.');
 
     const versions = set?.versions || [];
     byId('version-strip').innerHTML = versions.map((item) => `<button type="button" class="version-button" data-version="${item.number}" aria-pressed="${item.number === version?.number}" aria-label="View image ${item.number}${item.decision === 'ACCEPT' ? ', accepted' : ''}"><img src="${escapeHtml(item.image_url)}" alt="" loading="lazy"><span>${pad(item.number)} ${item.decision === 'ACCEPT' ? '↗' : ''}</span></button>`).join('');

@@ -100,7 +100,7 @@ test('first-image acceptance ends each set and every new proposal has fresh cont
   });
 });
 
-test('reasons are saved during live operation, hidden from its public state, then revealed', async t => {
+test('a paused revision exposes AI 2 instructions while keeping reasons private until exhibition', async t => {
   let engine;
   const f = fixture(t, { review: (_args, number) => {
     if (number === 1) { engine.pause(); return decision('REVISE'); }
@@ -111,9 +111,14 @@ test('reasons are saved during live operation, hidden from its public state, the
 
   const live = engine.publicState();
   assert.equal(live.phase, 'live');
+  assert.equal(live.running, false);
+  assert.equal(live.stage, 'paused');
+  assert.equal(live.activePrompt, null, 'the revision remains visible without an active generation');
   assert.equal(live.sets[0].versions[0].decision, 'REVISE');
+  assert.equal(live.sets[0].versions[0].revision_prompt, 'Move the horizon lower.');
+  assert.equal(live.sets[0].image_prompt, 'An image of a carefully mended cloth.');
   assert.equal(Object.hasOwn(live.sets[0], 'preservation_reason'), false);
-  for (const field of ['decision_reason', 'revision_prompt', 'intention_update']) {
+  for (const field of ['decision_reason', 'intention_update']) {
     assert.equal(Object.hasOwn(live.sets[0].versions[0], field), false);
   }
   assert.doesNotMatch(JSON.stringify(live), /Private/);

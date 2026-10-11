@@ -15,9 +15,15 @@ test('HTTP interface keeps secrets and live explanations private, and saves only
   const base = `http://127.0.0.1:${server.address().port}`;
   engine.state.sets.push({ number: 1, status: 'working', image_prompt: 'Public image instruction',
     preservation_reason: 'PRIVATE_REASON', versions: [{ number: 1, filename: 'set-01-v-01.png', prompt: 'Public prompt',
-      decision: 'REVISE', decision_reason: 'PRIVATE_DECISION', revision_prompt: 'PRIVATE_REVISION', intention_update: 'PRIVATE_UPDATE' }] });
+      decision: 'REVISE', decision_reason: 'PRIVATE_DECISION', revision_prompt: 'Public revision instruction for AI 2', intention_update: 'PRIVATE_UPDATE' }] });
   const publicText = await (await fetch(`${base}/api/state`)).text();
   assert.ok(publicText.includes('Public image instruction'));
+  const state = JSON.parse(publicText);
+  assert.equal(state.sets[0].versions[0].revision_prompt, 'Public revision instruction for AI 2');
+  assert.equal(Object.hasOwn(state.sets[0], 'preservation_reason'), false);
+  for (const field of ['decision_reason', 'intention_update']) {
+    assert.equal(Object.hasOwn(state.sets[0].versions[0], field), false);
+  }
   assert.ok(!publicText.includes('PRIVATE_'));
   assert.ok(!publicText.includes('private-test-key'));
   assert.equal((await fetch(`${base}/api/archive`)).status, 403);

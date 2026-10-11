@@ -108,6 +108,20 @@ export class OpenAIProvider {
     try { parsed = JSON.parse(output); }
     catch { throw new ProviderError('AI 1 returned an unreadable decision. Press Start to retry.', { requestId, output }); }
     const data = validateResult(parsed, kind);
+    // Saved collections retain their own system prompt. Enforce the new constraint
+    // only when that prompt explicitly declares it, leaving older records usable.
+    const wordLimit = Number(system.match(/^PROMPT WORD LIMIT: (\d+)\s*$/m)?.[1]);
+    const promptField = kind === 'proposal' ? 'image_prompt' : data.decision === 'REVISE' ? 'revision_prompt' : null;
+    if (Number.isSafeInteger(wordLimit) && wordLimit > 0 && promptField) {
+      const wordCount = data[promptField].split(/\s+/u).length;
+      if (wordCount > wordLimit) {
+        throw new ProviderError(
+          `AI 1 returned a ${wordCount}-word prompt; this experiment allows at most ${wordLimit}. The experiment is paused. Press Start to retry this step.`,
+          { code: 'prompt_word_limit', requestId, responseId: result.id, model: result.model,
+            usage: result.usage, field: promptField, wordCount, wordLimit, output },
+        );
+      }
+    }
     return { data, metadata: { requestId, responseId: result.id, model: result.model,
       usage: result.usage, output, inputText: content.filter(c => c.type === 'input_text').map(c => c.text) } };
   }

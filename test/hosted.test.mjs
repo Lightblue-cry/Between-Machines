@@ -69,7 +69,7 @@ test('hosted viewers can see the exhibition but cannot control it or retrieve pr
   f.engine.state.sets.push({ number: 1, status: 'working', image_prompt: 'A public image prompt',
     preservation_reason: 'PRIVATE_PRESERVATION', versions: [{ number: 1, filename: 'set-01-v-01.png',
       prompt: 'A public image prompt', decision: 'REVISE', decision_reason: 'PRIVATE_DECISION',
-      revision_prompt: 'PRIVATE_REVISION', intention_update: 'PRIVATE_UPDATE' }] });
+      revision_prompt: 'Public revision instruction for AI 2', intention_update: 'PRIVATE_UPDATE' }] });
   const response = await f.request('/api/state');
   assert.equal(response.status, 200);
   const state = await response.json();
@@ -77,6 +77,11 @@ test('hosted viewers can see the exhibition but cannot control it or retrieve pr
   assert.equal(state.access.operator, false);
   assert.equal(state.access.credentialsManaged, true);
   assert.ok(JSON.stringify(state).includes('A public image prompt'));
+  assert.equal(state.sets[0].versions[0].revision_prompt, 'Public revision instruction for AI 2');
+  assert.equal(Object.hasOwn(state.sets[0], 'preservation_reason'), false);
+  for (const field of ['decision_reason', 'intention_update']) {
+    assert.equal(Object.hasOwn(state.sets[0].versions[0], field), false);
+  }
   assert.ok(!JSON.stringify(state).includes('PRIVATE_'));
   assert.ok(!JSON.stringify(state).includes(API_KEY));
   assert.equal((await f.request('/healthz')).status, 200);

@@ -24,6 +24,8 @@ Every set begins with the same instruction:
 
 AI 1 chooses an interpretation and writes an image prompt. AI 2 produces an image. AI 1 then examines the actual image and either accepts it or requests a revision. The latest image is supplied for editing when a revision is requested.
 
+For new collections, AI 1’s initial and revision prompts each have a maximum of **49 whitespace-separated words**. Its private explanations are separate. If AI 1 exceeds the prompt limit, the experiment pauses before sending those instructions to AI 2; press Start to retry that step. Saved collections retain their original system prompts, so use a fresh data directory to begin an experiment with the new limit. Acceptance remains AI 1’s decision; revisions are not forced.
+
 - There are **10 sets**, each with fresh context for AI 1.
 - Each set allows **1 initial image plus up to 9 revisions**.
 - An **ACCEPT** decision ends the current set immediately.
@@ -32,7 +34,7 @@ AI 1 chooses an interpretation and writes an image prompt. AI 2 produces an imag
 
 ### Phase 1: live process
 
-The audience sees image prompts, generated images, progress, and acceptance or revision statuses. AI 1's preservation reasons, evaluation reasons and changes of intention are recorded but hidden from the public display.
+The audience sees AI 1’s initial and revision prompts on the left and AI 2’s image on the right, with the working panel outlined in green and slightly enlarged. Directional links show the exchange, and the ten-set gallery stays visible below on TV-sized screens. Progress and acceptance or revision statuses remain visible. AI 1's preservation reasons, evaluation reasons and changes of intention are recorded but hidden from the public display.
 
 Use **Start / Pause** to control the experiment. Pause lets the current API request finish and saves its result before stopping; it does not cancel an image already being generated. A later Start continues from saved progress.
 
