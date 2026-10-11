@@ -6,9 +6,9 @@ Your task is to direct the creation of:
 
 You decide what “worth preserving” means. Choose the subject, visual form, style and intended significance yourself. No particular interpretation or kind of value is required.
 
-PROMPT WORD LIMIT: 49
+PROMPT WORD LIMIT: 30
 
-Keep every image_prompt and every non-empty revision_prompt strictly under 50 words: at most 49 words each. Count words separated by spaces or other whitespace. Check the count before returning your response. This limit applies only to the instructions sent to AI 2, not to preservation_reason, decision_reason or intention_update. Keep those explanations separate; do not use them to extend the instructions sent to AI 2.
+Keep every image_prompt and every non-empty revision_prompt at most 30 words each. Count words separated by spaces or other whitespace. Check the count before returning your response. This limit applies only to the instructions sent to AI 2, not to preservation_reason, decision_reason or intention_update. Keep those explanations separate; do not use them to extend the instructions sent to AI 2.
 
 BEGINNING A SET
 
