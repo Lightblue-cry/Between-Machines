@@ -1,6 +1,6 @@
 # An image worth preserving for the next hundred years
 
-A local exhibition in two phases. AI 1 directs and evaluates; AI 2 generates and revises images. The audience watches ten independent sets unfold, then explores the saved images and the decisions behind them.
+A local exhibition in two phases. AI 1 directs and evaluates; AI 2 generates and revises images. The audience watches ten sets unfold, then explores the saved images and the decisions behind them.
 
 **To run this online with Render, follow [RENDER-SETUP.md](RENDER-SETUP.md).** The prepared `render.yaml` creates a hosted exhibition with a persistent disk and password-protected operator controls. The Mac instructions below are for local use.
 
@@ -24,9 +24,9 @@ Every set begins with the same instruction:
 
 AI 1 chooses an interpretation and writes an image prompt. AI 2 produces an image. AI 1 then examines the actual image and either accepts it or requests a revision. The latest image is supplied for editing when a revision is requested.
 
-For new collections, AI 1’s initial and revision prompts each have a maximum of **49 whitespace-separated words**. Its private explanations are separate. If AI 1 exceeds the prompt limit, the experiment pauses before sending those instructions to AI 2; press Start to retry that step. Saved collections retain their original system prompts, so use a fresh data directory to begin an experiment with the new limit. Acceptance remains AI 1’s decision; revisions are not forced.
+For new collections, AI 1’s initial and revision prompts each have a maximum of **20 whitespace-separated words**. Its private explanations are separate. If AI 1 exceeds the prompt limit, the experiment pauses before sending those instructions to AI 2; press Start to retry that step. Saved collections retain their original system prompts, so use a fresh data directory to begin an experiment with the new limit. Acceptance remains AI 1’s decision; revisions are not forced.
 
-- There are **10 sets**, each with fresh context for AI 1.
+- There are **10 sets**. In new collections, each proposal receives its set number and compact summaries of earlier sets (initial prompts, preservation reasons, and the latest used revision prompt where applicable). AI 1 is instructed to choose a conceptually and visually distinct interpretation for each set, rather than repeat a subject with cosmetic changes. It chooses the ten approaches itself; distinctness remains a model judgment, not a guaranteed semantic check. Reviews still use only the current set. Older collections retain their saved context policy.
 - Each set allows **1 initial image plus up to 9 revisions**.
 - An **ACCEPT** decision ends the current set immediately.
 - AI 1 also evaluates the tenth image. If it requests another revision, the set ends as **Unresolved**; its requested changes are saved but not executed.
@@ -40,7 +40,7 @@ Use **Start / Pause** to control the experiment. Pause lets the current API requ
 
 ### Phase 2: saved exhibition
 
-After all ten sets finish, generation stops automatically. The gallery shows the completed collection, including the reasons recorded during creation. Playback can present the saved results without generating more images.
+After all ten sets finish, generation stops automatically. The gallery shows the completed collection, including the reasons recorded during creation. Playback can present the saved results without generating more images. On TV-sized screens, the replay view places initial/revision prompts above side-by-side preservation and decision reasons; a change of intention appears below. It shows the full saved text without truncation or a nested scroll box, fitting type to the available space when a record is longer. The image and ten-set gallery remain visible. At narrow mobile sizes the page flows vertically.
 
 The completed exhibition uses local files and can run without an internet connection. Keep the local server running while displaying it.
 

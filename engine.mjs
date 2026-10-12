@@ -165,9 +165,25 @@ export class Experiment {
       this.save();
     }
     if (!set.image_prompt) {
-      const result = await this.operation('proposing', set, 1, () => this.provider.propose({
+      const proposal = {
         system: this.state.prompts.ai1, config: this.state.config,
-      }));
+      };
+      if (/^COLLECTION MODE: DISTINCT INTERPRETATIONS\s*$/m.test(proposal.system)) {
+        proposal.setNumber = set.number;
+        proposal.totalSets = LIMITS.sets;
+        // Only earlier completed sets inform a new proposal. Images, detailed
+        // evaluations and raw provider records stay out of this compact context.
+        proposal.previousSets = this.state.sets
+          .filter(previous => previous.number < set.number && previous.status !== 'working')
+          .map(previous => {
+            const latestPrompt = previous.versions.at(-1)?.prompt;
+            return { number: previous.number, image_prompt: previous.image_prompt,
+              preservation_reason: previous.preservation_reason,
+              ...(latestPrompt && latestPrompt !== previous.image_prompt ? { latest_image_prompt: latestPrompt } : {}),
+            };
+          });
+      }
+      const result = await this.operation('proposing', set, 1, () => this.provider.propose(proposal));
       set.image_prompt = result.data.image_prompt;
       set.preservation_reason = result.data.preservation_reason;
       set.proposalRecordId = result.recordId;

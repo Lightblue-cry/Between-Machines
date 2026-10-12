@@ -126,10 +126,17 @@ export class OpenAIProvider {
       usage: result.usage, output, inputText: content.filter(c => c.type === 'input_text').map(c => c.text) } };
   }
 
-  propose({ system, config }) {
-    // No previous sets are supplied: each proposal is independent.
+  propose({ system, config, setNumber = 1, totalSets = 10, previousSets = [] }) {
+    // The saved system prompt determines the experiment's context policy.
+    // Older collections keep their original independent-set behavior.
+    let text = 'Begin a new set. Develop your image proposal for “An image worth preserving for the next hundred years.” Return image_prompt and preservation_reason.';
+    if (/^COLLECTION MODE: DISTINCT INTERPRETATIONS\s*$/m.test(system)) {
+      text = `Begin set ${setNumber} of ${totalSets}. Develop a conceptually and visually distinct interpretation of “An image worth preserving for the next hundred years.”\n` +
+        `Earlier sets, supplied only as reference for avoiding repetition:\n${JSON.stringify(previousSets)}\n` +
+        'Choose a different subject, reason for preservation and visual approach from those already explored. Return image_prompt and preservation_reason.';
+    }
     return this.text({ system, config, schema: proposalSchema, kind: 'proposal',
-      content: [{ type: 'input_text', text: 'Begin a new set. Develop your image proposal for “An image worth preserving for the next hundred years.” Return image_prompt and preservation_reason.' }] });
+      content: [{ type: 'input_text', text }] });
   }
 
   review({ system, set, image, previousImage, config }) {

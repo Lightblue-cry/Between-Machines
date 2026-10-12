@@ -21,6 +21,7 @@
   let visibleImageCount = null;
   let galleryPulseTimer = null;
   let displayedRecord = null;
+  let replayFitFrame = null;
 
   function access() { return state?.access || { hosted: false, operator: true, credentialsManaged: false }; }
 
@@ -114,6 +115,37 @@
   }
 
   const wordCount = (text) => String(text || '').trim().split(/\s+/u).filter(Boolean).length;
+
+  // Reflow the full saved text to the available TV panel; never crop or summarize it.
+  function fitReplayText() {
+    cancelAnimationFrame(replayFitFrame);
+    replayFitFrame = requestAnimationFrame(() => {
+      const content = document.querySelector('.ai1-content');
+      const documentPanel = document.querySelector('.ai1-document');
+      const tv = window.matchMedia('(min-width: 1000px) and (min-height: 600px)').matches;
+      if (state?.phase !== 'exhibition' || !tv) {
+        content.style.removeProperty('--replay-font-size');
+        return;
+      }
+      const preferred = Math.max(15, Math.min(42, window.innerWidth * .0108));
+      const available = content.clientHeight - 1;
+      if (available <= 0) return;
+      const applySize = size => content.style.setProperty('--replay-font-size', `${size}px`);
+      applySize(preferred);
+      if (documentPanel.getBoundingClientRect().height <= available) return;
+      let low = 1, high = preferred;
+      for (let i = 0; i < 9; i++) {
+        const mid = (low + high) / 2;
+        applySize(mid);
+        if (documentPanel.getBoundingClientRect().height <= available) low = mid;
+        else high = mid;
+      }
+      applySize(Math.floor(low * 100) / 100);
+    });
+  }
+  window.addEventListener('resize', fitReplayText);
+  new ResizeObserver(fitReplayText).observe(document.querySelector('.ai1-content'));
+  document.fonts?.ready.then(fitReplayText);
 
   // Emphasize the machine working on the live set, never a browsed archive image.
   function renderExchange(exhibition) {
@@ -245,8 +277,8 @@
     setText('prompt-word-count', prompt ? `${wordCount(prompt)} WORDS` : '');
     // New prompts fit in full; retain expansion for long prompts in older collections.
     const promptLimit = 900;
-    byId('prompt-copy').className = `prompt-copy${!prompt ? ' is-empty' : ''}${prompt.length > promptLimit && !promptExpanded ? ' is-collapsed' : ''}`;
-    show('prompt-expand', prompt.length > promptLimit);
+    byId('prompt-copy').className = `prompt-copy${!prompt ? ' is-empty' : ''}${!exhibition && prompt.length > promptLimit && !promptExpanded ? ' is-collapsed' : ''}`;
+    show('prompt-expand', !exhibition && prompt.length > promptLimit);
     setText('prompt-expand', promptExpanded ? 'Read less −' : 'Read more +');
     byId('prompt-expand').setAttribute('aria-expanded', String(promptExpanded));
 
@@ -289,7 +321,7 @@
     byId('archive-title').innerHTML = exhibition ? 'The complete record<span class="lime-dot">.</span>' : 'A collection in the making<span class="lime-dot">.</span>';
     byId('completed-count').innerHTML = `${pad(state.counts.setsCompleted)}<span>/${pad(totalSets)}</span>`;
     setText('image-count', pad(state.counts.images));
-    setText('archive-description', exhibition ? 'Ten independent exchanges. Every version, including those left unresolved. Select a set to explore its record.' : 'Each set begins with the same question. Select a set to follow its images.');
+    setText('archive-description', exhibition ? 'Ten exchanges. Every version, including those left unresolved. Select a set to explore its record.' : 'Each set begins with the same question. Select a set to follow its images.');
     byId('gallery').innerHTML = Array.from({ length: totalSets }, (_, index) => {
       const item = state.sets.find((candidate) => candidate.number === index + 1);
       const last = item?.versions[item.versions.length - 1];
@@ -297,6 +329,7 @@
       return `<button type="button" class="set-card${last ? '' : ' is-placeholder'}${!exhibition && item?.number === state.activeSet ? ' is-live' : ''}" data-set="${index + 1}" ${item ? '' : 'disabled'} aria-pressed="${set?.number === index + 1}" aria-label="Set ${index + 1}${status ? `, ${status}` : ', not started'}"><div class="set-card-image">${last ? `<img src="${escapeHtml(last.image_url)}" alt="" loading="lazy">` : `<span class="placeholder-number">${pad(index + 1)}</span>`}${status ? `<span class="card-status${item?.status === 'accepted' ? ' accepted' : ''}">${status}</span>` : ''}</div><div class="set-card-meta"><span>SET ${pad(index + 1)}</span><span>${item ? `${item.versions.length} ${item.versions.length === 1 ? 'IMAGE' : 'IMAGES'}` : 'TO COME'}</span></div></button>`;
     }).join('');
     setText('footer-note', state.demo ? 'Demonstration mode · No paid AI requests' : exhibition ? `${state.counts.images} images · 10 sets · Complete saved record` : '10 sets · Up to 9 revisions per set · Every version retained');
+    fitReplayText();
     if (focusedVersion) document.querySelector(`[data-version="${Number(focusedVersion)}"]`)?.focus({ preventScroll: true });
     else if (focusedSet) document.querySelector(`[data-set="${Number(focusedSet)}"]`)?.focus({ preventScroll: true });
   }

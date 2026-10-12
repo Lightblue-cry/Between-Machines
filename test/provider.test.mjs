@@ -11,10 +11,10 @@ const textResponse = data => jsonResponse({ id: 'test', status: 'completed', mod
 const limitedSystem = readFileSync(new URL('../prompts/ai1.txt', import.meta.url), 'utf8');
 const words = count => Array.from({ length: count }, (_, index) => `word${index + 1}`).join(' ');
 
-test('new collections allow 49-word prompts and pause on 50 words for proposals and revisions', async t => {
-  assert.match(limitedSystem, /^PROMPT WORD LIMIT: 49$/m);
+test('new collections allow 20-word prompts and pause on 21 words for proposals and revisions', async t => {
+  assert.match(limitedSystem, /^PROMPT WORD LIMIT: 20$/m);
   for (const kind of ['proposal', 'review']) {
-    for (const wordCount of [49, 50]) {
+    for (const wordCount of [20, 21]) {
       await t.test(`${kind}: ${wordCount} words`, async () => {
         let calls = 0;
         const field = kind === 'proposal' ? 'image_prompt' : 'revision_prompt';
@@ -29,15 +29,15 @@ test('new collections allow 49-word prompts and pause on 50 words for proposals 
         const result = kind === 'proposal'
           ? p.propose({ system: limitedSystem, config })
           : p.review({ system: limitedSystem, config, image: png, set: { versions: [] } });
-        if (wordCount === 49) {
+        if (wordCount === 20) {
           assert.deepEqual((await result).data, data);
         } else {
           await assert.rejects(result, error => {
-            assert.match(error.publicMessage, /50-word prompt.*at most 49/);
+            assert.match(error.publicMessage, /21-word prompt.*at most 20/);
             assert.equal(error.details.code, 'prompt_word_limit');
             assert.equal(error.details.field, field);
-            assert.equal(error.details.wordCount, 50);
-            assert.equal(error.details.wordLimit, 49);
+            assert.equal(error.details.wordCount, 21);
+            assert.equal(error.details.wordLimit, 20);
             assert.equal(error.details.requestId, 'test-request');
             assert.equal(error.details.output, JSON.stringify(data));
             assert.equal(error.ambiguous, false);
@@ -47,6 +47,38 @@ test('new collections allow 49-word prompts and pause on 50 words for proposals 
         assert.equal(calls, 1, 'no automatic retry or extra paid request');
       });
     }
+  }
+});
+
+test('AI 1 receives the set number and prior summaries only for the distinct-interpretations experiment', async () => {
+  assert.match(limitedSystem, /^COLLECTION MODE: DISTINCT INTERPRETATIONS$/m);
+  const requests = [];
+  const p = new OpenAIProvider(() => 'test-key', async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return textResponse({ image_prompt: 'A new interpretation.', preservation_reason: 'A different form of value.' });
+  });
+  const previousSets = [{ number: 1, image_prompt: 'Earlier image.', preservation_reason: 'Earlier value.' }];
+  await p.propose({ system: limitedSystem, config, setNumber: 1, totalSets: 10, previousSets: [] });
+  await p.propose({ system: limitedSystem, config, setNumber: 2, totalSets: 10, previousSets });
+  await p.propose({ system: 'PROMPT WORD LIMIT: 30\nOriginal director instructions.', config,
+    setNumber: 2, totalSets: 10, previousSets });
+  assert.match(requests[0].input[0].content[0].text, /Begin set 1 of 10/);
+  assert.match(requests[0].input[0].content[0].text, /\n\[\]\n/);
+  const newContext = requests[1].input[0].content;
+  assert.equal(newContext.length, 1, 'no extra image or model requests');
+  assert.equal(newContext[0].type, 'input_text');
+  assert.match(newContext[0].text, /Begin set 2 of 10/);
+  assert.ok(newContext[0].text.includes(JSON.stringify(previousSets)));
+  assert.equal(requests[2].input[0].content[0].text,
+    'Begin a new set. Develop your image proposal for “An image worth preserving for the next hundred years.” Return image_prompt and preservation_reason.');
+  assert.equal(requests.length, 3);
+});
+
+test('saved 30-word and 49-word collections retain their declared limits', async () => {
+  for (const limit of [30, 49]) {
+    const data = { image_prompt: words(limit), preservation_reason: 'Original value.' };
+    const p = new OpenAIProvider(() => 'test-key', async () => textResponse(data));
+    assert.deepEqual((await p.propose({ system: `PROMPT WORD LIMIT: ${limit}`, config })).data, data);
   }
 });
 

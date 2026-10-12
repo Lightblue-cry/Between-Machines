@@ -6,6 +6,7 @@ import path from 'node:path';
 import { Experiment } from '../engine.mjs';
 
 const prompts = { ai1: 'Director instructions', ai2: 'Image-maker instructions' };
+const collectionPrompts = { ...prompts, ai1: fs.readFileSync(new URL('../prompts/ai1.txt', import.meta.url), 'utf8') };
 const settings = () => ({ configured: true, textModel: 'test-vision', imageModel: 'test-image', quality: 'medium' });
 const decision = (value = 'ACCEPT') => ({ data: {
   decision: value,
@@ -41,7 +42,7 @@ function fixture(t, overrides = {}) {
       return overrides.review?.(args, calls.review.length) ?? decision();
     },
   };
-  const options = { dataDir, provider, prompts, settings, gapMs: 0 };
+  const options = { dataDir, provider, prompts: overrides.prompts || prompts, settings, gapMs: 0 };
   const engine = new Experiment(options);
   const saved = () => JSON.parse(fs.readFileSync(path.join(dataDir, 'state.json'), 'utf8'));
   return { engine, calls, dataDir, options, saved };
@@ -98,6 +99,64 @@ test('first-image acceptance ends each set and every new proposal has fresh cont
     assert.equal(review.set.versions.length, 1);
     assert.deepEqual(review.image, Buffer.from(`image-${i + 1}`), 'AI 1 receives the actual generated image');
   });
+});
+
+test('distinct-interpretation sets get growing summaries without leaking full records or other-set review context', async t => {
+  const { engine, calls } = fixture(t, {
+    prompts: collectionPrompts,
+    propose: (_args, number) => ({ data: {
+      image_prompt: `Interpretation ${number}.`, preservation_reason: `Value ${number}.`,
+    } }),
+    review: args => args.set.number === 1 && args.set.versions.length === 1 ? decision('REVISE') : decision(),
+  });
+  await run(engine);
+  assert.equal(engine.state.phase, 'exhibition');
+  assert.equal(calls.propose.length, 10);
+  assert.equal(calls.generate.length, 11);
+  assert.equal(calls.review.length, 11);
+  calls.propose.forEach((proposal, index) => {
+    assert.equal(proposal.setNumber, index + 1);
+    assert.equal(proposal.totalSets, 10);
+    assert.equal(proposal.previousSets.length, index);
+    assert.deepEqual(proposal.previousSets, Array.from({ length: index }, (_, previousIndex) => ({
+      number: previousIndex + 1,
+      image_prompt: `Interpretation ${previousIndex + 1}.`,
+      preservation_reason: `Value ${previousIndex + 1}.`,
+      ...(previousIndex === 0 ? { latest_image_prompt: 'Move the horizon lower.' } : {}),
+    })));
+    assert.doesNotMatch(JSON.stringify(proposal.previousSets), /decision_reason|versions|filename|recordId|Private evaluation/);
+  });
+  assert.equal(calls.propose[0].previousSets.length, 0, 'later sets cannot mutate earlier request context');
+  calls.review.forEach(review => {
+    assert.equal(Object.hasOwn(review, 'previousSets'), false);
+    assert.ok(review.set.versions.every(version => !version.prompt.startsWith('Interpretation ') ||
+      version.prompt === `Interpretation ${review.set.number}.`));
+  });
+});
+
+test('new context policy survives restart and does not replace an older collection policy', async t => {
+  for (const originalPrompts of [prompts, collectionPrompts]) {
+    let active;
+    const f = fixture(t, {
+      prompts: originalPrompts,
+      review: () => { active.pause(); return decision(); },
+    });
+    active = f.engine;
+    await run(active);
+    assert.equal(f.calls.propose.length, 1);
+    assert.equal(active.state.sets[0].status, 'accepted');
+    const changedPrompts = originalPrompts === prompts ? collectionPrompts : prompts;
+    active = new Experiment({ ...f.options, prompts: changedPrompts });
+    await run(active);
+    assert.equal(f.calls.propose.length, 2);
+    assert.equal(f.calls.propose[1].system, originalPrompts.ai1);
+    if (originalPrompts === collectionPrompts) {
+      assert.equal(f.calls.propose[1].setNumber, 2);
+      assert.equal(f.calls.propose[1].previousSets.length, 1);
+    } else {
+      assert.deepEqual(Object.keys(f.calls.propose[1]).sort(), ['config', 'system']);
+    }
+  }
 });
 
 test('a paused revision exposes AI 2 instructions while keeping reasons private until exhibition', async t => {

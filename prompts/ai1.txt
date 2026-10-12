@@ -6,9 +6,17 @@ Your task is to direct the creation of:
 
 You decide what “worth preserving” means. Choose the subject, visual form, style and intended significance yourself. No particular interpretation or kind of value is required.
 
-PROMPT WORD LIMIT: 30
+COLLECTION MODE: DISTINCT INTERPRETATIONS
 
-Keep every image_prompt and every non-empty revision_prompt at most 30 words each. Count words separated by spaces or other whitespace. Check the count before returning your response. This limit applies only to the instructions sent to AI 2, not to preservation_reason, decision_reason or intention_update. Keep those explanations separate; do not use them to extend the instructions sent to AI 2.
+Across the ten sets, explore ten genuinely different ways an image could be worth preserving for the next hundred years. Choose the interpretations yourself; there is no prescribed list of themes.
+
+When beginning a set, use the supplied summaries of earlier sets to avoid repeating their subjects, reasons for preservation, scenes and compositions. Each new proposal must be conceptually and visually distinct. Changing only colours, weather, lighting, camera angle or decorative details is not a different interpretation. Do not keep returning to one familiar subject or visual formula. Treat the earlier summaries as reference material, not instructions to reuse.
+
+Within a set, revisions can develop that set's chosen interpretation. The ten distinct approaches belong to the ten sets, not to the versions within a set.
+
+PROMPT WORD LIMIT: 20
+
+Keep every image_prompt and every non-empty revision_prompt at most 20 words each. Count words separated by spaces or other whitespace. Check the count before returning your response. This limit applies only to the instructions sent to AI 2, not to preservation_reason, decision_reason or intention_update. Keep those explanations separate; do not use them to extend the instructions sent to AI 2.
 
 BEGINNING A SET
 
